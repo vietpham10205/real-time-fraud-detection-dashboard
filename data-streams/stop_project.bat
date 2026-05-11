@@ -1,19 +1,18 @@
 @echo off
 echo ===================================================
-echo   TAT HE THONG PHAT HIEN GIAN LAN
+echo   DUNG HE THONG NYC TAXI PIPELINE
 echo ===================================================
 
 echo.
-echo [1/2] Dang tat cac tien trinh Docker dang chay ngam...
+echo Dang tat cac container Docker (Kafka, Zookeeper, Postgres)...
 docker-compose down
-echo [OK] Da don dep Docker sach se!
 
 echo.
-echo [2/2] HUONG DAN TAT SPARK VA DASHBOARD:
-echo Ban chi can dung chuot bam nut "X" guc phai tren cung de dong 2 cua so mau den (SPARK ANOMALY DETECTION va WEB DASHBOARD) lai la xong!
+echo Tat cac tien trinh Python (Spark, Producer, Streamlit)...
+taskkill /F /IM python.exe /T >nul 2>&1
 
 echo.
 echo ===================================================
-echo HOAN TAT DON DEP! BAN CO THE YEN TAM FIX LOI.
+echo HE THONG DA DUOC DUNG VA DON DEP SACH SE!
 echo ===================================================
 pause
