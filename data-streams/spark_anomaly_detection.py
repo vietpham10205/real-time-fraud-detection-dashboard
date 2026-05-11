@@ -1,4 +1,11 @@
 import os
+import sys
+
+# SỬA LỖI WINDOWS HADOOP: Thiết lập HADOOP_HOME trỏ tới thư mục chứa winutils.exe
+hadoop_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), "hadoop")
+os.environ["HADOOP_HOME"] = hadoop_dir
+os.environ["PATH"] += os.pathsep + os.path.join(hadoop_dir, "bin")
+
 import numpy as np
 import pandas as pd
 from pyspark.sql import SparkSession

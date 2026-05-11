@@ -5,7 +5,7 @@ echo ===================================================
 
 echo.
 echo [1/3] Dang khoi dong Docker (Kafka, Zookeeper)...
-docker-compose up -d
+docker-compose up -d --build
 echo [OK] Docker da chay nen thanh cong!
 echo.
 echo === VUI LONG DOI 15 GIAY DE KAFKA KHOI DONG XONG ===

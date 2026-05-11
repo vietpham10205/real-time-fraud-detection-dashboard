@@ -5,8 +5,8 @@ import uuid
 from datetime import datetime
 from kafka import KafkaProducer
 
-def get_kafka_producer():
-    """Khởi tạo Kafka Producer với cấu hình bảo mật SASL (chuẩn theo docker-compose.yml)"""
+def create_kafka_producer():
+    """Khởi tạo Kafka Producer với cấu hình bảo mật SASL"""
     return KafkaProducer(
         bootstrap_servers='localhost:9093',
         security_protocol='SASL_PLAINTEXT',
@@ -16,58 +16,52 @@ def get_kafka_producer():
         value_serializer=lambda v: json.dumps(v).encode('utf-8')
     )
 
-def generate_transaction():
-    """Tạo ngẫu nhiên dữ liệu giao dịch giả lập"""
+def generate_movie_rating():
+    """Tạo ngẫu nhiên dữ liệu đánh giá phim (Người dùng thật & Hacker)"""
     
-    # 90% giao dịch bình thường (dưới 5,000 USD)
-    # 10% giao dịch bất thường (rất lớn, trên 15,000 USD để trigger Rule 1)
-    is_anomaly = random.random() < 0.1
+    # 80% là bình thường, 20% là Hacker cố tình spam
+    is_anomaly = random.random() < 0.2
     
     if is_anomaly:
-        amount = round(random.uniform(15000.0, 50000.0), 2)
+        # Hacker cố tình dìm giá: Toàn đánh giá 0.5 hoặc 1.0 (Bị AI và Z-Score tóm)
+        rating = random.choice([0.5, 1.0])
+        user_id = "9999" # Dùng chung 1 tài khoản spam liên tục
     else:
-        amount = round(random.uniform(10.0, 4999.0), 2)
+        rating = round(random.uniform(3.0, 5.0), 1)
+        user_id = str(random.randint(1, 1000))
         
     return {
-        "transactionId": str(uuid.uuid4()),
-        "accountId": f"ACC_{random.randint(100, 105)}", # Có 6 tài khoản để dễ bị trùng lặp -> Trigger Rule 2
-        "amount": amount,
-        "location": random.choice(["Hanoi", "HoChiMinh", "New York", "London", "Tokyo", "Singapore"]),
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "userId": user_id,
+        "movie": {
+            "movieId": str(random.randint(1, 100)),
+            "title": f"Movie_Demo_{random.randint(1, 10)}"
+        },
+        "rating": rating,
+        "timestamp": str(int(time.time()))
     }
 
-def main():
-    topic_name = "financial_transactions"
+if __name__ == "__main__":
+    producer = create_kafka_producer()
+    print("🚀 BẮT ĐẦU GIẢ LẬP HACKER (REVIEW BOMBING) TẤN CÔNG VÀO HỆ THỐNG...")
+    print("Chờ một lát để xem AI và Z-Score trên Dashboard bắt quả tang nhé!\n")
     
     try:
-        producer = get_kafka_producer()
-        print(f"✅ Kết nối thành công tới Kafka tại localhost:9093. Đang đẩy dữ liệu vào topic '{topic_name}'...")
-        
         while True:
-            # Sinh ra 1 giao dịch
-            transaction = generate_transaction()
+            rating_data = generate_movie_rating()
             
-            # Đôi khi gửi dồn dập nhiều giao dịch (Mô phỏng hacker quẹt thẻ liên tục để trigger Rule 2)
-            if random.random() < 0.05:
-                print(f"⚠️ [MÔ PHỎNG] Gửi dồn dập 5 giao dịch cho tài khoản {transaction['accountId']}")
-                for _ in range(5):
-                    spam_tx = transaction.copy()
-                    spam_tx["transactionId"] = str(uuid.uuid4())
-                    spam_tx["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    producer.send(topic_name, value=spam_tx)
-                    time.sleep(0.1) # Dồn dập
+            # Gửi thẳng vào topic 'ratings' chung mâm với dữ liệu thật
+            producer.send('ratings', value=rating_data)
+            
+            if rating_data["userId"] == "9999":
+                print(f"🚨 [HACKER] Tài khoản 9999 vừa spam đánh giá {rating_data['rating']} sao!")
+                # Bắn siêu nhanh 0.03s để xả rác vào hệ thống
+                time.sleep(0.03)
             else:
-                producer.send(topic_name, value=transaction)
-            
-            # In ra console để theo dõi
-            print(f"Đã gửi: {transaction}")
-            
-            # Đợi 1 thời gian ngẫu nhiên từ 0.5s đến 2s
-            time.sleep(random.uniform(0.5, 2.0))
-            
-    except Exception as e:
-        print(f"❌ Lỗi khi gửi dữ liệu tới Kafka: {e}")
-        print("💡 Gợi ý: Hãy chắc chắn bạn đã cài đặt thư viện 'kafka-python' và Kafka Docker đang chạy!")
-
-if __name__ == "__main__":
-    main()
+                print(f"✅ [NORMAL] Tài khoản {rating_data['userId']} đánh giá {rating_data['rating']} sao.")
+                # Gửi nhanh hơn gấp 3 lần (0.3s)
+                time.sleep(0.3)
+                
+    except KeyboardInterrupt:
+        print("\n🛑 Đã dừng công cụ Hacker.")
+    finally:
+        producer.close()
