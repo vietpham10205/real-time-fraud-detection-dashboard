@@ -52,7 +52,7 @@ services:
     build:
       context: ./
       dockerfile: ./datasets/movielens/Dockerfile
-    entrypoint: [ "python3", "produce.py", "--stream-delay", "1.0", "--consumer" ]
+    entrypoint: [ "python3", "produce.py", "--stream-delay", "0.05", "--consumer" ]
     env_file: platform_variables.env
     environment:
       KAFKA_TOPIC: "ratings"

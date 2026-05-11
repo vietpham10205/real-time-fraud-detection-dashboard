@@ -24,8 +24,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 Real-Time Dashboard: Phát Hiện Gian Lận Đánh Giá Phim")
-st.markdown("Hiển thị đồng thời **Luồng dữ liệu tổng (Live Stream)** và **Các giao dịch gian lận (Alerts)**.")
+st.title("🚀 Real-Time Dashboard: Hệ thống AI Phát Hiện Gian Lận")
+st.markdown("Kiến trúc Lai (Hybrid Architecture): Kết hợp **Z-Score (Thống kê)** và **Isolation Forest (Machine Learning)**.")
 
 @st.cache_resource
 def create_kafka_consumer():
@@ -50,13 +50,18 @@ def create_kafka_consumer():
 
 consumer = create_kafka_consumer()
 
+# State variables
 if "total_anomalies" not in st.session_state: st.session_state.total_anomalies = 0
-if "inflation_count" not in st.session_state: st.session_state.inflation_count = 0
-if "bombing_count" not in st.session_state: st.session_state.bombing_count = 0
+if "ml_count" not in st.session_state: st.session_state.ml_count = 0
+if "zscore_count" not in st.session_state: st.session_state.zscore_count = 0
 if "recent_alerts" not in st.session_state: st.session_state.recent_alerts = []
 if "total_processed" not in st.session_state: st.session_state.total_processed = 0
 if "live_stream" not in st.session_state: st.session_state.live_stream = []
-if "start_time" not in st.session_state: st.session_state.start_time = time.time()
+
+# Tinh toc do tuc thoi (Speed)
+if "last_time" not in st.session_state: st.session_state.last_time = time.time()
+if "previous_count" not in st.session_state: st.session_state.previous_count = 0
+if "current_speed" not in st.session_state: st.session_state.current_speed = 0.0
 
 # ==================================
 # GIAO DIỆN UI (LAYOUT)
@@ -64,19 +69,19 @@ if "start_time" not in st.session_state: st.session_state.start_time = time.time
 col1, col2, col3, col4 = st.columns(4)
 metric_total_processed = col1.empty()
 metric_total_anomalies = col2.empty()
-metric_inflation = col3.empty()
-metric_bombing = col4.empty()
+metric_ml = col3.empty()
+metric_zscore = col4.empty()
 
 with metric_total_processed: st.metric(label="Tổng Dữ Liệu Đang Chảy", value=0)
-with metric_total_anomalies: st.metric(label="Tổng Lượt Đánh Giá Ảo", value=0)
-with metric_inflation: st.metric(label="📈 Nâng khống điểm (5.0)", value=0)
-with metric_bombing: st.metric(label="📉 Hạ bệ/Dìm giá (<=1.0)", value=0)
+with metric_total_anomalies: st.metric(label="Tổng Cảnh Báo", value=0)
+with metric_ml: st.metric(label="🤖 AI Phát Hiện (Isolation Forest)", value=0)
+with metric_zscore: st.metric(label="🔥 Đột biến (Z-Score)", value=0)
 
 col_chart, col_speed = st.columns([3, 1])
 with col_chart:
-    st.markdown("### 📊 Biểu đồ so sánh các loại gian lận")
+    st.markdown("### 📊 Biểu đồ phân tích thuật toán")
     chart_placeholder = st.empty()
-    chart_data = pd.DataFrame({"Loại Gian Lận": ["Nâng khống điểm", "Cố tình hạ bệ"], "Số Lượng": [0, 0]}).set_index("Loại Gian Lận")
+    chart_data = pd.DataFrame({"Thuật Toán": ["AI (ML)", "Z-Score"], "Số Lượng": [0, 0]}).set_index("Thuật Toán")
     chart_placeholder.bar_chart(chart_data)
 with col_speed:
     st.markdown("### ⚡ Tốc độ xử lý (Dữ liệu/giây)")
@@ -93,7 +98,7 @@ with col_live:
 with col_alerts:
     st.markdown("### 🚨 Các cảnh báo bất thường (Alerts)")
     alert_table_placeholder = st.empty()
-    alert_table_placeholder.dataframe(pd.DataFrame(columns=["Thời gian", "Người dùng", "Phim", "Điểm số", "Loại Vi Phạm"]), use_container_width=True)
+    alert_table_placeholder.dataframe(pd.DataFrame(columns=["Thời gian", "Người dùng", "Phim", "Điểm số", "Loại Cảnh Báo"]), use_container_width=True)
 
 run_dashboard = st.checkbox("Bắt đầu theo dõi luồng dữ liệu (Live Stream)", value=True)
 
@@ -111,7 +116,7 @@ if run_dashboard and consumer:
                     data = message.value
                     topic = message.topic
                     
-                    # 1. Nếu là luồng dữ liệu thô liên tục (Tất cả đánh giá)
+                    # 1. Luồng dữ liệu thô liên tục
                     if topic == 'ratings':
                         st.session_state.total_processed += 1
                         st.session_state.live_stream.insert(0, {
@@ -120,40 +125,50 @@ if run_dashboard and consumer:
                             "Phim": data.get('movie', {}).get('title', 'Unknown') if isinstance(data.get('movie'), dict) else "Unknown",
                             "Điểm số": data.get('rating')
                         })
-                        st.session_state.live_stream = st.session_state.live_stream[:10] # Giữ 10 dòng
+                        st.session_state.live_stream = st.session_state.live_stream[:10]
                         has_new_data = True
                         
-                    # 2. Nếu là cảnh báo gian lận từ Spark
+                    # 2. Cảnh báo gian lận từ Spark (Kiến trúc Lai)
                     elif topic == 'movie_anomalies':
                         st.session_state.total_anomalies += 1
-                        if "Nâng khống" in data.get('anomaly_type', ''):
-                            st.session_state.inflation_count += 1
-                        elif "hạ điểm" in data.get('anomaly_type', ''):
-                            st.session_state.bombing_count += 1
+                        anomaly_type_str = data.get('anomaly_type', '')
+                        
+                        # Phân loại dựa trên chuỗi trả về từ Spark
+                        if "ML" in anomaly_type_str or "Isolation Forest" in anomaly_type_str:
+                            st.session_state.ml_count += 1
+                        elif "ĐỘT BIẾN" in anomaly_type_str or "Z-Score" in anomaly_type_str:
+                            st.session_state.zscore_count += 1
                             
                         st.session_state.recent_alerts.insert(0, {
                             "Thời gian": data.get('event_time'),
                             "Người dùng": data.get('userId'),
                             "Phim": data.get('title', 'Unknown'),
                             "Điểm số": data.get('rating_val'),
-                            "Loại Vi Phạm": data.get('anomaly_type')
+                            "Loại Cảnh Báo": anomaly_type_str
                         })
-                        st.session_state.recent_alerts = st.session_state.recent_alerts[:10] # Giữ 10 dòng
+                        st.session_state.recent_alerts = st.session_state.recent_alerts[:10]
                         has_new_data = True
 
-            # Cập nhật UI nếu có dữ liệu mới
+            # Tính tốc độ tức thời (Cập nhật mỗi giây)
+            current_time = time.time()
+            time_diff = current_time - st.session_state.last_time
+            if time_diff >= 1.0:
+                msg_diff = st.session_state.total_processed - st.session_state.previous_count
+                st.session_state.current_speed = round(msg_diff / time_diff, 1)
+                st.session_state.previous_count = st.session_state.total_processed
+                st.session_state.last_time = current_time
+                has_new_data = True # Ép UI cập nhật tốc độ
+
+            # Cập nhật UI
             if has_new_data:
-                # Tính tốc độ
-                elapsed = time.time() - st.session_state.start_time
-                speed = int(st.session_state.total_processed / elapsed) if elapsed > 0 else 0
-                speed_placeholder.metric(label="", value=f"{speed} msg/s")
+                speed_placeholder.metric(label="", value=f"{st.session_state.current_speed} msg/s")
 
                 with metric_total_processed: st.metric(label="Tổng Dữ Liệu Đang Chảy", value=st.session_state.total_processed)
-                with metric_total_anomalies: st.metric(label="Tổng Lượt Đánh Giá Ảo", value=st.session_state.total_anomalies)
-                with metric_inflation: st.metric(label="📈 Nâng khống điểm (5.0)", value=st.session_state.inflation_count)
-                with metric_bombing: st.metric(label="📉 Hạ bệ/Dìm giá (<=1.0)", value=st.session_state.bombing_count)
+                with metric_total_anomalies: st.metric(label="Tổng Cảnh Báo", value=st.session_state.total_anomalies)
+                with metric_ml: st.metric(label="🤖 AI (Isolation Forest)", value=st.session_state.ml_count)
+                with metric_zscore: st.metric(label="🔥 Đột biến (Z-Score)", value=st.session_state.zscore_count)
 
-                chart_data = pd.DataFrame({"Loại Gian Lận": ["Nâng khống điểm", "Cố tình hạ bệ"], "Số Lượng": [st.session_state.inflation_count, st.session_state.bombing_count]}).set_index("Loại Gian Lận")
+                chart_data = pd.DataFrame({"Thuật Toán": ["AI (Isolation Forest)", "Thống Kê (Z-Score)"], "Số Lượng": [st.session_state.ml_count, st.session_state.zscore_count]}).set_index("Thuật Toán")
                 chart_placeholder.bar_chart(chart_data)
 
                 live_table_placeholder.dataframe(pd.DataFrame(st.session_state.live_stream), use_container_width=True)
