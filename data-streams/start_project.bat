@@ -1,4 +1,6 @@
 @echo off
+setlocal enabledelayedexpansion
+
 echo ==========================================================
 echo   KHOI DONG NYC TAXI: REAL-TIME FLEET INTELLIGENCE PIPELINE
 echo ==========================================================
@@ -9,18 +11,28 @@ pip install -q pandas pyarrow kafka-python pyspark psycopg2-binary streamlit plo
 
 echo.
 echo [2/5] Dang khoi dong Docker (Kafka, Zookeeper, Postgres)...
-docker-compose up -d
-echo [OK] Docker da chay nen thanh cong!
-echo.
-echo === VUI LONG DOI 20 GIAY DE KAFKA VA POSTGRES KHOI DONG ===
-timeout /t 20 /nobreak
+docker compose up -d
 
 echo.
-echo [3/5] Khoi dong Kafka Producer TRUOC (de tao Topic)...
+echo === DOI CAC SERVICE TRO NEN HEALTHY ===
+:WAIT_LOOP
+:: Kiem tra trang thai (case-insensitive /i)
+docker compose ps --format "{{.Health}}" | findstr /i /v "healthy" | findstr "." >nul
+if errorlevel 1 goto SERVICES_READY
+
+echo Dang cho Docker services (Zookeeper, Kafka, Postgres)...
+timeout /t 5 /nobreak >nul
+goto WAIT_LOOP
+
+:SERVICES_READY
+echo [OK] Tat ca Docker services da san sang!
+
+echo.
+echo [3/5] Khoi dong Kafka Producer TRUOC...
 start cmd /k "title KAFKA PRODUCER && echo Dang day du lieu vao Kafka... && python taxi_producer.py"
 
 echo.
-echo === DOI 10 GIAY DE PRODUCER TAO TOPIC TREN KAFKA ===
+echo === DOI 10 GIAY DE PRODUCER KHOI TAO TOPIC ===
 timeout /t 10 /nobreak
 
 echo.

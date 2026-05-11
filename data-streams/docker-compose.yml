@@ -13,6 +13,11 @@ services:
       ZOOKEEPER_SERVERS: zookeeper:2888:3888
     networks:
       - app-tier
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   kafka:
     image: confluentinc/cp-kafka:7.1.1
@@ -29,9 +34,15 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     networks:
       - app-tier
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   postgres:
     image: postgres:13
@@ -44,3 +55,8 @@ services:
       - "5432:5432"
     networks:
       - app-tier
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d taxidb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

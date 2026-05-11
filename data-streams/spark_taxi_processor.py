@@ -1,6 +1,5 @@
 import os
 import time
-import json
 import numpy as np
 
 # Set HADOOP_HOME for Windows compatibility (winutils.exe)
@@ -23,7 +22,6 @@ DB_PASS = "password"
 # Kafka configuration
 KAFKA_BROKER = "localhost:9093"
 KAFKA_TOPIC = "taxi_stream"
-KAFKA_SINK_TOPIC = "taxi_anomalies"
 
 def setup_database():
     """Create PostgreSQL tables if they don't exist."""
@@ -240,7 +238,7 @@ def main():
         .format("kafka") \
         .option("kafka.bootstrap.servers", KAFKA_BROKER) \
         .option("subscribe", KAFKA_TOPIC) \
-        .option("startingOffsets", "latest") \
+        .option("startingOffsets", "earliest") \
         .load()
         
     parsed_stream = raw_stream.select(

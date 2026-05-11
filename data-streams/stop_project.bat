@@ -4,12 +4,20 @@ echo   DUNG HE THONG NYC TAXI PIPELINE
 echo ===================================================
 
 echo.
-echo Dang tat cac container Docker (Kafka, Zookeeper, Postgres)...
-docker-compose down
+echo [1/2] Dang tat cac ung dung Python...
+taskkill /F /FI "WINDOWTITLE eq KAFKA PRODUCER*" /T >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq SPARK PROCESSOR*" /T >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq WEB DASHBOARD*" /T >nul 2>&1
+echo [OK] Cac cua so Python da duoc tat.
 
 echo.
-echo Tat cac tien trinh Python (Spark, Producer, Streamlit)...
-taskkill /F /IM python.exe /T >nul 2>&1
+echo [2/2] Dang tat Docker (Kafka, Zookeeper, Postgres)...
+docker compose down
+
+echo.
+echo === DON DEP FILE TAM (Spark Checkpoints) ===
+if exist "spark-warehouse" rd /s /q "spark-warehouse"
+if exist "checkpoint" rd /s /q "checkpoint"
 
 echo.
 echo ===================================================
