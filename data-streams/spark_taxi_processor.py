@@ -8,7 +8,7 @@ os.environ["HADOOP_HOME"] = hadoop_home
 os.environ["PATH"] = os.path.join(hadoop_home, "bin") + os.pathsep + os.environ.get("PATH", "")
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col, hour, unix_timestamp, when, to_timestamp, lit
+from pyspark.sql.functions import from_json, col, hour, unix_timestamp, to_timestamp, lit
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, LongType
 from sklearn.ensemble import IsolationForest as SklearnIsolationForest
 import psycopg2
@@ -29,12 +29,14 @@ def setup_database():
         conn = psycopg2.connect(host=DB_HOST, database=DB_NAME, user=DB_USER, password=DB_PASS)
         cur = conn.cursor()
         
+        # Added taxi_type
         cur.execute("""
             CREATE TABLE IF NOT EXISTS normal_trips (
                 id SERIAL PRIMARY KEY,
+                taxi_type VARCHAR(50),
                 VendorID INT,
-                tpep_pickup_datetime TIMESTAMP,
-                tpep_dropoff_datetime TIMESTAMP,
+                pickup_datetime TIMESTAMP,
+                dropoff_datetime TIMESTAMP,
                 passenger_count INT,
                 trip_distance FLOAT,
                 fare_amount FLOAT,
@@ -45,12 +47,14 @@ def setup_database():
             )
         """)
         
+        # Added taxi_type
         cur.execute("""
             CREATE TABLE IF NOT EXISTS anomalous_trips (
                 id SERIAL PRIMARY KEY,
+                taxi_type VARCHAR(50),
                 VendorID INT,
-                tpep_pickup_datetime TIMESTAMP,
-                tpep_dropoff_datetime TIMESTAMP,
+                pickup_datetime TIMESTAMP,
+                dropoff_datetime TIMESTAMP,
                 passenger_count INT,
                 trip_distance FLOAT,
                 fare_amount FLOAT,
@@ -77,11 +81,10 @@ def setup_database():
         conn.commit()
         cur.close()
         conn.close()
-        print("[OK] Database schema verified.")
+        print("[OK] Database schema verified (Multi-source enabled).")
     except Exception as e:
         print(f"[WARN] Database setup error (will keep trying later): {e}")
 
-# Global model for continuous learning
 global_model = None
 
 def process_batch(batch_df, batch_id):
@@ -100,10 +103,10 @@ def process_batch(batch_df, batch_id):
     
     # ===== STEP 1: Feature Engineering =====
     df = batch_df \
-        .withColumn("pickup_ts", unix_timestamp(to_timestamp("tpep_pickup_datetime"))) \
-        .withColumn("dropoff_ts", unix_timestamp(to_timestamp("tpep_dropoff_datetime"))) \
+        .withColumn("pickup_ts", unix_timestamp(to_timestamp("pickup_datetime"))) \
+        .withColumn("dropoff_ts", unix_timestamp(to_timestamp("dropoff_datetime"))) \
         .withColumn("trip_duration_sec", col("dropoff_ts") - col("pickup_ts")) \
-        .withColumn("pickup_hour", hour(to_timestamp("tpep_pickup_datetime")))
+        .withColumn("pickup_hour", hour(to_timestamp("pickup_datetime")))
                  
     df = df.filter((col("trip_duration_sec") > 0) & (col("trip_distance") > 0))
     df = df.withColumn("avg_speed_kmh", col("trip_distance") * 1.60934 / (col("trip_duration_sec") / 3600.0))
@@ -116,29 +119,27 @@ def process_batch(batch_df, batch_id):
         print(f"[Batch {batch_id}] Skipped after cleaning — only {clean_count} valid records")
         return
     
-    # ===== STEP 2: Continuous Training — Isolation Forest (sklearn) =====
+    # ===== STEP 2: ML Model =====
     print(f"  [ML] Training Isolation Forest on {clean_count} records...")
     
-    # Collect to driver for sklearn (for real Big Data, use distributed ML)
-    select_cols = list(set(feature_cols + ["VendorID", "tpep_pickup_datetime", "tpep_dropoff_datetime", "passenger_count"]))
+    # Include taxi_type in selection
+    select_cols = list(set(feature_cols + ["taxi_type", "VendorID", "pickup_datetime", "dropoff_datetime", "passenger_count"]))
     pandas_df = df_clean.select(*select_cols).toPandas()
     
     X = pandas_df[feature_cols].values
     
-    # Continuous retraining: fit a new model on every batch
     global_model = SklearnIsolationForest(
         n_estimators=100,
-        contamination=0.03,  # 3% anomalies
+        contamination=0.03,
         random_state=42
     )
     global_model.fit(X)
     
-    # Predict: -1 = anomaly, 1 = normal
     predictions = global_model.predict(X)
     scores = global_model.decision_function(X)
     
     pandas_df["prediction"] = predictions
-    pandas_df["anomaly_score"] = -scores  # Invert so higher = more anomalous
+    pandas_df["anomaly_score"] = -scores
     
     anomalies_pdf = pandas_df[pandas_df["prediction"] == -1]
     normals_pdf = pandas_df[pandas_df["prediction"] == 1]
@@ -153,7 +154,6 @@ def process_batch(batch_df, batch_id):
         conn = psycopg2.connect(host=DB_HOST, database=DB_NAME, user=DB_USER, password=DB_PASS)
         cur = conn.cursor()
         
-        # Write anomalies
         for _, row in anomalies_pdf.iterrows():
             dist = float(row["trip_distance"])
             fare = float(row["fare_amount"])
@@ -170,23 +170,21 @@ def process_batch(batch_df, batch_id):
                 reason = "Statistical Outlier (IsolationForest)"
             
             cur.execute("""
-                INSERT INTO anomalous_trips (VendorID, tpep_pickup_datetime, tpep_dropoff_datetime, passenger_count, trip_distance, fare_amount, trip_duration_sec, avg_speed_kmh, anomaly_score, reason)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (int(row["VendorID"]), str(row["tpep_pickup_datetime"]), str(row["tpep_dropoff_datetime"]),
+                INSERT INTO anomalous_trips (taxi_type, VendorID, pickup_datetime, dropoff_datetime, passenger_count, trip_distance, fare_amount, trip_duration_sec, avg_speed_kmh, anomaly_score, reason)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (str(row["taxi_type"]), int(row["VendorID"]), str(row["pickup_datetime"]), str(row["dropoff_datetime"]),
                   int(row["passenger_count"]), dist, fare,
                   int(duration), speed, float(row["anomaly_score"]), reason))
         
-        # Write a sample of normal trips
         normal_sample = normals_pdf.head(50)
         for _, row in normal_sample.iterrows():
             cur.execute("""
-                INSERT INTO normal_trips (VendorID, tpep_pickup_datetime, tpep_dropoff_datetime, passenger_count, trip_distance, fare_amount, trip_duration_sec, avg_speed_kmh, anomaly_score)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (int(row["VendorID"]), str(row["tpep_pickup_datetime"]), str(row["tpep_dropoff_datetime"]),
+                INSERT INTO normal_trips (taxi_type, VendorID, pickup_datetime, dropoff_datetime, passenger_count, trip_distance, fare_amount, trip_duration_sec, avg_speed_kmh, anomaly_score)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (str(row["taxi_type"]), int(row["VendorID"]), str(row["pickup_datetime"]), str(row["dropoff_datetime"]),
                   int(row["passenger_count"]), float(row["trip_distance"]), float(row["fare_amount"]),
                   int(row["trip_duration_sec"]), float(row["avg_speed_kmh"]), float(row["anomaly_score"])))
         
-        # Write pipeline system metrics
         end_time = time.time()
         processing_time_ms = (end_time - start_time) * 1000
         throughput_eps = count / max(end_time - start_time, 0.001)
@@ -200,8 +198,7 @@ def process_batch(batch_df, batch_id):
         conn.commit()
         cur.close()
         conn.close()
-        print(f"  [DB] Written to PostgreSQL: {num_anomalies} anomalies + {len(normal_sample)} normals")
-        print(f"  [PERF] Latency: {processing_time_ms:.0f}ms | Throughput: {throughput_eps:.1f} rows/s | Cost: ${estimated_cost_usd:.5f}")
+        print(f"  [PERF] Latency: {processing_time_ms:.0f}ms | Throughput: {throughput_eps:.1f} rows/s")
     except Exception as e:
         print(f"  [ERROR] Failed to write to PostgreSQL: {e}")
 
@@ -218,22 +215,19 @@ def main():
     spark.sparkContext.setLogLevel("WARN")
     
     print("\n" + "="*60)
-    print("  Real-time Fleet Intelligence Pipeline")
-    print("  Spark Version:", spark.version)
-    print("  Kafka Broker:", KAFKA_BROKER)
-    print("  Kafka Topic:", KAFKA_TOPIC)
+    print("  Real-time Fleet Intelligence Pipeline (Dual Source)")
     print("="*60 + "\n")
     
     schema = StructType([
+        StructField("taxi_type", StringType(), True),
         StructField("VendorID", LongType(), True),
-        StructField("tpep_pickup_datetime", StringType(), True),
-        StructField("tpep_dropoff_datetime", StringType(), True),
+        StructField("pickup_datetime", StringType(), True),
+        StructField("dropoff_datetime", StringType(), True),
         StructField("passenger_count", DoubleType(), True),
         StructField("trip_distance", DoubleType(), True),
         StructField("fare_amount", DoubleType(), True),
     ])
 
-    # Read from Kafka
     raw_stream = spark.readStream \
         .format("kafka") \
         .option("kafka.bootstrap.servers", KAFKA_BROKER) \
@@ -245,14 +239,13 @@ def main():
         from_json(col("value").cast("string"), schema).alias("data")
     ).select("data.*")
     
-    # Main processing stream: foreachBatch -> ML + PostgreSQL
     query = parsed_stream.writeStream \
         .foreachBatch(process_batch) \
         .outputMode("append") \
         .start()
 
     print("[STREAMING] Pipeline is running. Waiting for data from Kafka...")
-    print("[STREAMING] Make sure taxi_producer.py is running to send data.\n")
+    print("[STREAMING] Run `python yellow_producer.py` and `python green_producer.py` in parallel.\n")
         
     query.awaitTermination()
 
