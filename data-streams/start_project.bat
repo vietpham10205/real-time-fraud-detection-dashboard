@@ -26,7 +26,12 @@ goto WAIT_LOOP
 echo [OK] Tat ca Docker services da san sang!
 
 echo.
-echo [3/6] Reset Database Schema (Dam bao tuong thich đa nguon)...
+echo [2.5/6] Tao Kafka topic truoc khi Spark khoi dong...
+docker exec kafka kafka-topics --bootstrap-server localhost:9092 --create --topic taxi_stream --partitions 1 --replication-factor 1 --if-not-exists
+echo [OK] Kafka topic "taxi_stream" da san sang!
+
+echo.
+echo [3/6] Reset Database Schema (Dam bao tuong thich da nguon)...
 python reset_db.py
 
 echo.
