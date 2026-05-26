@@ -40,7 +40,10 @@ def stream_data():
     df['taxi_type'] = TAXI_TYPE
 
     total = len(df)
-    print(f"[{TAXI_TYPE.upper()} PRODUCER] Loaded {total} records. Starting INFINITE stream...")
+    print(f"[{TAXI_TYPE.upper()} PRODUCER] Loaded {total} records. Converting to memory-optimized list...")
+    records = df.to_dict(orient='records')
+    del df # Free Pandas memory
+    print(f"[{TAXI_TYPE.upper()} PRODUCER] Conversion complete! Starting INFINITE stream...")
     
     iteration = 1
     while True:
@@ -48,8 +51,7 @@ def stream_data():
         count = 0
         start_time = time.time()
         
-        for _, row in df.iterrows():
-            record = row.to_dict()
+        for record in records:
             producer.send(KAFKA_TOPIC, record)
             count += 1
             

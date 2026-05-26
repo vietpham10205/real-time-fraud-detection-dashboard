@@ -708,6 +708,7 @@ def main():
         # Extra retry tolerance while topic is being created
         .option("kafka.consumer.auto.offset.reset", "earliest")
         .option("kafka.max.poll.records", "500")
+        .option("maxOffsetsPerTrigger", 5000)
         .load()
     )
 
