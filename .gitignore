@@ -1,1 +1,5 @@
 .agent/
+
+# Generated labeled datasets — too large for GitHub (200MB+).
+# Recreate by running: python data-streams/ai_batch_labeler.py
+data-streams/datasets/taxi/*_labeled.parquet

@@ -33,6 +33,20 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # ── Throughput tuning for high-volume Yellow producer ──────────────────
+      # Allow larger socket buffers so the broker can absorb burst writes
+      KAFKA_SOCKET_SEND_BUFFER_BYTES: 1048576
+      KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 1048576
+      KAFKA_SOCKET_REQUEST_MAX_BYTES: 104857600
+      # Flush less frequently to disk — reduces I/O bottleneck
+      KAFKA_LOG_FLUSH_INTERVAL_MESSAGES: 50000
+      KAFKA_LOG_FLUSH_INTERVAL_MS: 2000
+      # Increase max message and fetch sizes
+      KAFKA_MESSAGE_MAX_BYTES: 5242880
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 5242880
+      # Num I/O and network threads — helps under sustained load
+      KAFKA_NUM_IO_THREADS: 4
+      KAFKA_NUM_NETWORK_THREADS: 4
     depends_on:
       zookeeper:
         condition: service_healthy

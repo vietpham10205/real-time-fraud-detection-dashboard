@@ -40,7 +40,11 @@ start cmd /k "title SPARK PROCESSOR && echo Dang chay Spark... && python spark_t
 
 echo.
 echo [5/6] Khoi dong Web Dashboard (Cua so moi)...
-start cmd /k "title WEB DASHBOARD && echo Dang chay Streamlit... && streamlit run dashboard.py"
+start cmd /k "title WEB DASHBOARD && echo Dang chay Streamlit Dashboard (port 8501)... && streamlit run dashboard.py --server.port 8501"
+
+echo.
+echo [5.5/6] Khoi dong Benchmark Evaluator (Cua so moi - port 8502)...
+start cmd /k "title BENCHMARK EVALUATOR && echo Dang chay Benchmark Evaluator (port 8502)... && streamlit run benchmark_evaluator.py --server.port 8502"
 
 echo.
 echo === DOI 15 GIAY DE SPARK VA DASHBOARD ON DINH ===
@@ -55,7 +59,8 @@ echo.
 echo ==========================================================
 echo TOAN BO HE THONG DA DUOC KICH HOAT THANH CONG!
 echo ----------------------------------------------------------
-echo - Dashboard: http://localhost:8501
-echo - 2 Nguon du lieu dang do vao Kafka song song.
+echo   Main Dashboard   : http://localhost:8501
+echo   Benchmark AI     : http://localhost:8502
+echo   2 luong du lieu (Yellow + Green) dang truyen vao Kafka.
 echo ==========================================================
 pause

@@ -23,14 +23,14 @@ def create_producer():
 def stream_data():
     print(f"[{TAXI_TYPE.upper()} PRODUCER] Connecting to Kafka...")
     producer = create_producer()
-    
+
     file_path = "datasets/taxi/yellow_tripdata_2026-03.parquet"
     if not os.path.exists(file_path):
         print(f"[ERROR] File not found: {file_path}")
         return
 
     print(f"[{TAXI_TYPE.upper()} PRODUCER] Pre-loading data from {file_path}...")
-    cols_needed = ["VendorID", "tpep_pickup_datetime", "tpep_dropoff_datetime", 
+    cols_needed = ["VendorID", "tpep_pickup_datetime", "tpep_dropoff_datetime",
                    "passenger_count", "trip_distance", "fare_amount"]
     df = pd.read_parquet(file_path, columns=cols_needed)
     df = df.rename(columns={"tpep_pickup_datetime": "pickup_datetime", "tpep_dropoff_datetime": "dropoff_datetime"})
@@ -42,27 +42,27 @@ def stream_data():
     total = len(df)
     print(f"[{TAXI_TYPE.upper()} PRODUCER] Loaded {total} records. Converting to memory-optimized list...")
     records = df.to_dict(orient='records')
-    del df # Free Pandas memory
+    del df  # Free Pandas memory
     print(f"[{TAXI_TYPE.upper()} PRODUCER] Conversion complete! Starting INFINITE stream...")
-    
+
     iteration = 1
     while True:
         print(f"\n>>> Starting Iteration #{iteration} <<<")
         count = 0
         start_time = time.time()
-        
+
         for record in records:
             producer.send(KAFKA_TOPIC, record)
             count += 1
-            
-            if count % 1000 == 0:
+
+            if count % 500 == 0:
                 elapsed = time.time() - start_time
                 rate = count / max(elapsed, 0.001)
                 print(f"[{TAXI_TYPE.upper()}] Sent {count}/{total} | Rate: {rate:.0f} msg/s")
                 producer.flush()
-            
-            time.sleep(0.002) # Slightly faster to keep demo alive
-            
+
+            time.sleep(0.005)
+
         producer.flush()
         print(f"\n[INFO] {TAXI_TYPE.upper()} reached end of file. Restarting loop...")
         iteration += 1

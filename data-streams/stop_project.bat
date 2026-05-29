@@ -5,11 +5,12 @@ echo ===================================================
 
 echo.
 echo [1/2] Dang tat cac ung dung Python...
-taskkill /F /FI "WINDOWTITLE eq YELLOW PRODUCER*" /T >nul 2>&1
-taskkill /F /FI "WINDOWTITLE eq GREEN PRODUCER*" /T >nul 2>&1
-taskkill /F /FI "WINDOWTITLE eq SPARK PROCESSOR*" /T >nul 2>&1
-taskkill /F /FI "WINDOWTITLE eq WEB DASHBOARD*" /T >nul 2>&1
-echo [OK] Tat ca cac cua so da duoc dong.
+taskkill /F /FI "WINDOWTITLE eq YELLOW PRODUCER*"    /T >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq GREEN PRODUCER*"     /T >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq SPARK PROCESSOR*"    /T >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq WEB DASHBOARD*"      /T >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq BENCHMARK EVALUATOR*" /T >nul 2>&1
+echo [OK] Tat ca 5 cua so (bao gom Benchmark Evaluator) da duoc dong.
 
 echo.
 echo [2/2] Dang tat Docker (Kafka, Zookeeper, Postgres)...
